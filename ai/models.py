@@ -109,7 +109,7 @@ class ChallengeStrategyTag(Enum):
 class ChallengeStrategy(CustomModel):
     name :Optional[str] = Field(description="Who suggestied it")
     summary :str = Field(description="Short actionable summary")
-    tag :ChallengeStrategyTag = Field(description="Tag of the strategy")
+    tag :str = Field(description="Tag of the strategy")
 
 class Challenge(CustomModel):
     challenge : str = Field(description="Summarize their core challenge in 1–2 sentences. If they didn’t explicitly say it but implied it, infer it clearly.")
