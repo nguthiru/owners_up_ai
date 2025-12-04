@@ -79,6 +79,7 @@ class WeeklyGoal(CustomModel):
 
 class WeeklyGoals(CustomModel):
     goals : List[WeeklyGoal] = Field(description="Weekly goals of members")
+    summary_message : Optional[str] = Field(description="Summary message that will be sent to the group participants")
 
 
 class WeeklyAttendanceStatus(Enum):

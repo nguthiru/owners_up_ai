@@ -106,6 +106,31 @@ GET_GOALS = PromptTemplate(
     
     You are an expert transcript analyst, from this transcript, I want you to extract the goals of each participant in the provided format.
 
+    For the summary message, here is an example: 
+    "
+    Hey everyone!
+        Here’s what I heard your accountability commitments are.
+        Take a moment to double-check:
+        If it’s not quantifiable, meaning a stranger on the street could not clearly say “yes, you did it” or “no, you didn’t”, then please update it now.
+        And if you've changed your mind since we ended the call, update it ASAP.
+        This is what you’re being held accountable to, and it’s due by Tuesday at 9 PM EST (with proof).
+        @Christian Wiles
+        Set up FLOW Framework Dashboard
+        Map Automate workflows, identify $10/hr tasks to delegate
+        @Joel Dueck
+        Attend Thursday’s BGM networking event and bring one-pager
+        continue outreach and schedule coffees
+        @Shannon Gordon
+        Decide and “nail down” niche (one or two options) by next week.
+        @Bob Stewart
+        Share the updated deck/deliverable to the group before the weekend
+        @Tim Faith
+        Send out 5 more network activation messages, schedule 2 calls from that batch of outreach messages
+        @Felix Jimenez @Daniel Maynes @Mario Meyer @Matthew Butler
+        please drop here your quantifiable goals, so we can hold each other accountable
+    
+    "
+
     Here is the transcript: {transcript}.
 
     {format_instructions}

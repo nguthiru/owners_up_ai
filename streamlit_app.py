@@ -596,6 +596,18 @@ by Wednesday."
                                 st.success(f"**Goal:** {goal_text}")
                                 st.caption("This goal is specific and actionable")
 
+                    # Display summary message
+                    summary_message = result_dict.get('summary_message')
+                    if summary_message:
+                        st.markdown("---")
+                        st.markdown("### Summary Message for Slack")
+                        st.text_area(
+                            "Copy this message to post in your Slack group:",
+                            value=summary_message,
+                            height=150,
+                            key="summary_message_box"
+                        )
+
                     # Show raw JSON
                     with st.expander("View Raw JSON Output"):
                         display_json(result_dict)
