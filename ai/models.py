@@ -25,13 +25,14 @@ class MarketingActivityStage(Enum):
         closed = "closed"
         proposal = "proposals"
         meetings = "meetings"
+        none_mentioned = "none_mentioned"
 
 
 class MarketingActivityType(Enum):
     network_activation = "Network Activation"
     linkedin = "linkedin"
     cold_outreach = "cold_outreach"
-    none = "none_mentioned"
+    none_mentioned = "none_mentioned"
 
 class MarketingActivityContractType(Enum):
     monthly = "monthly"
