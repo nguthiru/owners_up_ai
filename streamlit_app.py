@@ -5,7 +5,8 @@ from ai.functions import (
     get_challenges,
     get_stuck_detections,
     get_goals,
-    get_attendance
+    get_attendance,
+    get_call_sentiment
 )
 from pydantic import ValidationError
 
@@ -212,7 +213,8 @@ page = st.sidebar.radio(
         "Challenges",
         "Stuck Detections",
         "Weekly Goals",
-        "Attendance"
+        "Attendance",
+        "Call Sentiment"
     ]
 )
 
@@ -259,6 +261,26 @@ if page == "Home":
         <div class="notion-card">
             <h3>Stuck Detection</h3>
             <p>Detect when participants are stuck or stalled, with actionable next steps.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    col4, col5 = st.columns(2)
+
+    with col4:
+        st.markdown("""
+        <div class="notion-card">
+            <h3>Call Sentiment</h3>
+            <p>Analyze emotional tone and group morale to track group health and detect shifts in energy.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col5:
+        st.markdown("""
+        <div class="notion-card">
+            <h3>Goal Management</h3>
+            <p>Extract weekly goals, detect vagueness, and generate Slack-ready accountability messages.</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -720,6 +742,118 @@ I don't see Mike on the call today."
                     st.error(f"Error: {str(e)}")
         else:
             st.warning("Please enter both attendance record and transcript.")
+
+# CALL SENTIMENT PAGE
+elif page == "Call Sentiment":
+    st.title("Call Sentiment Analysis")
+    st.markdown("Analyze the emotional tone of weekly group conversations to detect morale shifts and group health.")
+
+    st.markdown("---")
+
+    with st.expander("View Sample Transcript"):
+        st.text("""
+Sample: "I'm pumped about this week! Just closed a huge client and feeling really good
+about the direction things are going. Mark said something earlier that really resonated
+with me about staying focused. On the flip side, I've been feeling a bit overwhelmed
+with all the new projects coming in, but I know it's a good problem to have."
+        """)
+
+    transcript = st.text_area(
+        "Enter Transcript",
+        height=200,
+        placeholder="Paste the mastermind transcript here..."
+    )
+
+    if st.button("Analyze Sentiment", type="primary"):
+        if transcript.strip():
+            with st.spinner("Analyzing sentiment..."):
+                try:
+                    result = get_call_sentiment(transcript)
+
+                    st.success("Analysis complete")
+
+                    result_dict = result.model_dump(mode='json')
+
+                    # Display sentiment score with visual indicator
+                    st.markdown("### Overall Sentiment")
+
+                    sentiment_score = result_dict.get('sentiment_score', 3)
+                    confidence_score = result_dict.get('confidence_score', 0)
+
+                    col1, col2, col3 = st.columns(3)
+
+                    with col1:
+                        # Color code based on sentiment
+                        if sentiment_score >= 4:
+                            st.metric("Sentiment Score", f"{sentiment_score}/5", delta="Positive")
+                        elif sentiment_score >= 3:
+                            st.metric("Sentiment Score", f"{sentiment_score}/5", delta="Neutral")
+                        else:
+                            st.metric("Sentiment Score", f"{sentiment_score}/5", delta="Negative")
+
+                    with col2:
+                        st.metric("Confidence", f"{confidence_score:.0%}")
+
+                    with col3:
+                        dominant_emotion = result_dict.get('dominant_emotion', 'N/A')
+                        st.markdown(f"**Dominant Emotion**")
+                        st.markdown(f'<span class="tag tag-blue">{dominant_emotion}</span>', unsafe_allow_html=True)
+
+                    st.markdown("---")
+
+                    # Rationale
+                    st.markdown("### Analysis Rationale")
+                    st.info(result_dict.get('rationale', 'N/A'))
+
+                    # Representative quotes
+                    st.markdown("### Participant Emotions & Quotes")
+                    quotes = result_dict.get('representative_quotes', [])
+
+                    if quotes:
+                        for quote_obj in quotes:
+                            name = quote_obj.get('name', 'Unknown')
+                            emotions = quote_obj.get('emotion', [])
+                            exact_quotes = quote_obj.get('exact_quotes', [])
+                            is_negative = quote_obj.get('is_negative', False)
+
+                            with st.container():
+                                col_a, col_b = st.columns([3, 1])
+
+                                with col_a:
+                                    st.markdown(f"**{name}**")
+
+                                with col_b:
+                                    if is_negative:
+                                        st.markdown('<span class="tag tag-orange">Negative</span>', unsafe_allow_html=True)
+                                    else:
+                                        st.markdown('<span class="tag tag-green">Positive</span>', unsafe_allow_html=True)
+
+                                # Display emotions as tags
+                                if emotions:
+                                    emotion_html = " ".join([f'<span class="tag tag-gray">{emotion}</span>' for emotion in emotions])
+                                    st.markdown(f"**Emotions:** {emotion_html}", unsafe_allow_html=True)
+
+                                # Display quotes
+                                if exact_quotes:
+                                    st.markdown("**Quotes:**")
+                                    for quote in exact_quotes:
+                                        st.markdown(f'> "{quote}"')
+
+                                st.markdown("---")
+                    else:
+                        st.warning("No representative quotes found")
+
+                    # Show raw JSON
+                    with st.expander("View Raw JSON Output"):
+                        display_json(result_dict)
+
+                except ValidationError as e:
+                    st.error("Validation Error")
+                    st.json(e.errors())
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
+        else:
+            st.warning("Please enter a transcript to analyze.")
 
 # Footer
 st.markdown("---")

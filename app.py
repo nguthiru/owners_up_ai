@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify
-from ai.functions import get_marketing_activities, get_challenges, get_attendance, get_goals, get_stuck_detections
+from ai.functions import get_marketing_activities, get_challenges, get_attendance, get_goals, get_stuck_detections, get_call_sentiment
 from pydantic import ValidationError
 import os
 from dotenv import load_dotenv
@@ -236,6 +236,62 @@ def extract_stuck_detections():
             return jsonify({"error": "transcript must be a string"}), 400
 
         result = get_stuck_detections(transcript)
+
+        return jsonify(result.model_dump(mode='json')), 200
+
+    except ValidationError as e:
+        return jsonify({
+            "error": "Validation error",
+            "details": e.errors()
+        }), 422
+
+    except Exception as e:
+        return jsonify({
+            "error": "Internal server error",
+            "message": str(e)
+        }), 500
+
+@app.route('/api/call-sentiment', methods=['POST'])
+def extract_call_sentiment():
+    """
+    Extract call sentiment from a transcript
+
+    Expected JSON body:
+    {
+        "transcript": "string - the transcript text to analyze"
+    }
+
+    Returns:
+    {
+        "sentiment_score": int - sentiment score 1-5,
+        "rationale": string - rationale for the score,
+        "dominant_emotion": string - dominant emotion,
+        "representative_quotes": [
+            {
+                "name": string - participant name,
+                "emotion": [string] - list of emotions,
+                "exact_quotes": [string] - list of quotes,
+                "is_negative": bool - whether expressing negative emotion
+            }
+        ],
+        "confidence_score": int - confidence level
+    }
+    """
+    try:
+        data = request.get_json()
+
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+
+        transcript = data.get('transcript')
+
+        if not transcript:
+            return jsonify({"error": "transcript field is required"}), 400
+
+        if not isinstance(transcript, str):
+            return jsonify({"error": "transcript must be a string"}), 400
+
+        result = get_call_sentiment(transcript)
 
         return jsonify(result.model_dump(mode='json')), 200
 

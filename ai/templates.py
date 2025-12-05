@@ -1,11 +1,20 @@
 from langchain_core.prompts import PromptTemplate
 
-from .models import Challenges, MarketingActivities, Challenge, RiskRatings, StuckDetections, WeeklyAttendance, WeeklyGoals
+from .models import (
+    CallSentiment,
+    Challenges,
+    MarketingActivities,
+    Challenge,
+    RiskRatings,
+    StuckDetections,
+    WeeklyAttendance,
+    WeeklyGoals,
+)
 
 
 GET_MARKETING_ACTIVITY_OUTCOME_PROMPT = PromptTemplate(
-    input_variables= ["transcript"],
-    template = """
+    input_variables=["transcript"],
+    template="""
     You are an expert transcript analyst for entrepreneur peer groups.
     Your task is to extract all marketing activities mentioned by each participant, and classify them according to Peer Progress categories.
     For outcomes, here is your guide:
@@ -17,8 +26,9 @@ GET_MARKETING_ACTIVITY_OUTCOME_PROMPT = PromptTemplate(
 
     Format Instructions: {format_instructions}
     """,
-
-    partial_variables= {"format_instructions": MarketingActivities.parser.get_format_instructions()}
+    partial_variables={
+        "format_instructions": MarketingActivities.parser.get_format_instructions()
+    },
 )
 
 GET_CHALLENGES_PROMPT = PromptTemplate(
@@ -48,8 +58,9 @@ GET_CHALLENGES_PROMPT = PromptTemplate(
 
     . Here is the transcript: {transcript}. {format_instructions}
     """,
-    partial_variables= {"format_instructions": Challenges.parser.get_format_instructions()}
-
+    partial_variables={
+        "format_instructions": Challenges.parser.get_format_instructions()
+    },
 )
 
 
@@ -76,8 +87,9 @@ GET_STUCK_DETECTIONS = PromptTemplate(
 
     Here is the transcript: {transcript}. {format_instructions}
     """,
-    partial_variables= {"format_instructions": StuckDetections.parser.get_format_instructions()}
-
+    partial_variables={
+        "format_instructions": StuckDetections.parser.get_format_instructions()
+    },
 )
 
 
@@ -94,13 +106,12 @@ GET_ATTENDANCE = PromptTemplate(
     
     {format_instructions}
     """,
-
-    partial_variables= {"format_instructions": WeeklyAttendance.parser.get_format_instructions()}
-
+    partial_variables={
+        "format_instructions": WeeklyAttendance.parser.get_format_instructions()
+    },
 )
 
 GET_GOALS = PromptTemplate(
-
     input_variables=["transcript"],
     template="""
     
@@ -135,14 +146,13 @@ GET_GOALS = PromptTemplate(
 
     {format_instructions}
     """,
-    partial_variables= {"format_instructions": WeeklyGoals.parser.get_format_instructions()}
-
-
+    partial_variables={
+        "format_instructions": WeeklyGoals.parser.get_format_instructions()
+    },
 )
 
 GET_RISK_RATING = PromptTemplate(
-
-    input_variables=["attendance", "goals","marketing_activity"],
+    input_variables=["attendance", "goals", "marketing_activity"],
     template="""
     You are an expert transcript analyst. You are required to detect which members are doing well given their attendance and goals set. Use the marketing activity to be able to tell whether they are crushing or not.
     Here are the signals to guide your output:
@@ -180,7 +190,55 @@ GET_RISK_RATING = PromptTemplate(
 
     Format instructions. {format_instructions}
     """,
+    partial_variables={
+        "format_instructions": RiskRatings.parser.get_format_instructions()
+    },
+)
 
-    partial_variables= {"format_instructions": RiskRatings.parser.get_format_instructions()}
-    
+GET_CALL_SENTIMENT = PromptTemplate(
+    input_variables=["transcript"],
+    template="""
+    You are an expert transcript analyst for entrepreneur peer groups.
+Your job is to analyze the emotional tone of weekly group conversations to detect morale shifts, frustration spikes, and positive energy.
+Your analysis will be used to track group health and flag moments where interventions or celebrations may be needed.
+Critical Instructions:
+SCORING RUBRIC
+5 – High Positive: Multiple members express excitement, wins, or breakthroughs. Upbeat tone, laughter, celebratory peer responses.
+4 – Positive: General optimism, some wins shared, supportive energy. Mild frustrations addressed constructively.
+3 – Neutral/Mixed: Balanced tone. Some excitement, some frustrations. No strong spikes.
+2 – Negative: Several members express being stuck or low energy. Few wins. Venting without resolution.
+1 – Very Negative: Predominantly stuck, frustrated, demoralized tone. Little progress or positive reinforcement.
+WHAT TO ANALYZE
+Look for these signals in the transcript:
+Language tone: excited, frustrated, stuck, optimistic, self-doubting, etc.
+Emotional words & intensity: “pumped,” “finally,” “ugh,” “overwhelmed.”
+Framing of progress: emphasis on wins vs. problems.
+Peer response tone: supportive, indifferent, tense, celebratory.
+Laughter or affirmations: positive energy indicators.
+EXAMPLE OUTPUT
+Sentiment Score: 4 (Positive)
+Rationale:
+The group showed a generally upbeat and collaborative tone. Several members shared wins and progress updates, while others expressed challenges that were met with supportive, constructive responses. Laughter and light teasing early in the call also added positive energy.
+Dominant Emotions: supportive, optimistic, frustrated, stuck
+Representative Quotes:
+Mark Alcazar: “I’m meeting with him tomorrow, like, holy shit, wow—great!”
+Mack Earnhardt: “I have felt completely stuck for the last two weeks.”
+Jon Benedict: “The least that we can do for each other is repost it and like it.”
+Confidence Score: 0.82
+Participants Expressing Negative Emotions:
+Mack Earnhardt | Agile Reasoning
+Emotions: stuck, low energy
+Evidence: “I have felt completely stuck for the last two weeks.” / “I don’t feel like I’ve gotten anything done.”
+Jon Benedict
+Emotions: frustrated, overwhelmed
+Evidence: “Thanks for letting me gripe… It’s my first world issues.” / “I literally can’t get internet!”
+Jeremie Kilgore
+Emotions: self-doubt, imposter syndrome
+Evidence: “I keep coming back to, is this worded right?” / “Is anybody gonna believe me if I say these things?”
+    Here is the transcript: {transcript}.
+    {format_instructions}
+    """,
+    partial_variables={
+        "format_instructions": CallSentiment.parser.get_format_instructions()
+    },
 )

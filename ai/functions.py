@@ -1,5 +1,5 @@
-from .models import Challenges, MarketingActivities, StuckDetections, WeeklyAttendance, WeeklyGoals
-from .templates import GET_ATTENDANCE, GET_GOALS, GET_MARKETING_ACTIVITY_OUTCOME_PROMPT,GET_CHALLENGES_PROMPT, GET_RISK_RATING, GET_STUCK_DETECTIONS
+from .models import CallSentiment, Challenges, MarketingActivities, StuckDetections, WeeklyAttendance, WeeklyGoals
+from .templates import GET_ATTENDANCE, GET_CALL_SENTIMENT, GET_GOALS, GET_MARKETING_ACTIVITY_OUTCOME_PROMPT,GET_CHALLENGES_PROMPT, GET_RISK_RATING, GET_STUCK_DETECTIONS
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 
@@ -103,3 +103,15 @@ def get_risk_rating(attendance, goals, marketing_activity):
         }
     )
 
+def get_call_sentiment(transcript) -> CallSentiment:
+    """
+    Get the sentiment of the call
+    """
+
+    chain = GET_CALL_SENTIMENT | llm 
+
+    res = chain.invoke(transcript)
+
+    res = CallSentiment.parser.parse(res.content)
+
+    return res
