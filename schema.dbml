@@ -1,0 +1,222 @@
+// ===========================================
+// PROGRAMS & GROUPS
+// ===========================================
+
+Table programs {
+  id integer [primary key]
+  name varchar
+  slug varchar [unique]
+  description text [null]
+  is_active bool [default: true]
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+}
+
+Table groups {
+  id integer [primary key]
+  program_id integer [ref: > programs.id]
+  name varchar  // e.g., "CTOx Group 1.5"
+  cohort varchar [null]  // e.g., "2024-Q1"
+  start_date date [null]
+  end_date date [null]
+  is_active bool [default: true]
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+}
+
+// ===========================================
+// MEMBERS & GROUP MEMBERSHIP
+// ===========================================
+
+Table members {
+  id integer [primary key]
+  name varchar
+  email varchar [unique, null]
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+}
+
+enum group_member_role {
+  facilitator
+  participant
+  observer
+}
+
+Table group_members {
+  id integer [primary key]
+  group_id integer [ref: > groups.id]
+  member_id integer [ref: > members.id]
+  role group_member_role [default: 'participant']
+  joined_at datetime [default: `now()`]
+  left_at datetime [null]
+  is_active bool [default: true]
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+
+  indexes {
+    (group_id, member_id) [unique]
+  }
+}
+
+// ===========================================
+// SESSIONS
+// ===========================================
+
+Table sessions {
+  id integer [primary key]
+  group_id integer [ref: > groups.id]
+  date datetime
+  session_number integer [null]  // e.g., session 3 of 12
+  notes text [null]
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+}
+
+enum session_attendance_status {
+  present
+  absent_without_updates
+  travelling
+  family_time
+  work_business
+  wellness
+}
+
+Table session_attendance {
+  id integer [primary key]
+  session_id integer [ref: > sessions.id]
+  member_id integer [ref: > members.id]
+  status session_attendance_status
+  notes varchar [null]
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+
+  indexes {
+    (session_id, member_id) [unique]
+  }
+}
+
+// ===========================================
+// GOALS & CHALLENGES
+// ===========================================
+
+Table goals {
+  id integer [primary key]
+  member_id integer [ref: > members.id]
+  session_id integer [ref: > sessions.id]
+  goal varchar
+  is_vague bool [default: false]
+  is_completed bool [default: false]
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+}
+
+Table challenges {
+  id integer [primary key]
+  member_id integer [ref: > members.id]
+  session_id integer [ref: > sessions.id]
+  description varchar
+  category varchar [null]
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+}
+
+Table challenge_strategies {
+  id integer [primary key]
+  challenge_id integer [ref: > challenges.id]
+  suggested_by integer [ref: > members.id]
+  summary varchar
+  tag varchar [null]
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+}
+
+Table member_stucks {
+  id integer [primary key]
+  member_id integer [ref: > members.id]
+  session_id integer [ref: > sessions.id]
+  classification varchar
+  stuck_summary varchar
+  exact_quotes text[]
+  potential_next_step varchar [null]
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+}
+
+// ===========================================
+// MARKETING ACTIVITIES
+// ===========================================
+
+enum marketing_activity_stage {
+  none_mentioned
+  meetings
+  proposals
+  closed
+}
+
+enum marketing_activity_type {
+  none_mentioned
+  network_activation
+  linkedin
+  cold_outreach
+}
+
+enum marketing_activity_contract_type {
+  one_time
+  monthly
+  hybrid
+}
+
+Table marketing_activities {
+  id integer [primary key]
+  member_id integer [ref: > members.id]
+  session_id integer [ref: > sessions.id]
+  stage marketing_activity_stage
+  activity marketing_activity_type
+  quantity integer [default: 0]
+  is_win bool [default: false]
+  contract_type marketing_activity_contract_type [null]
+  revenue integer [null]
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+}
+
+Table marketing_outcomes {
+  id integer [primary key]
+  activity_id integer [ref: - marketing_activities.id]
+  no_of_meetings integer [default: 0]
+  no_of_proposals integer [default: 0]
+  no_of_clients integer [default: 0]
+  notes varchar [null]
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+}
+
+// ===========================================
+// SESSION SENTIMENT ANALYSIS
+// ===========================================
+
+Table session_sentiment {
+  id integer [primary key]
+  session_id integer [ref: > sessions.id]
+  sentiment_score integer  // e.g., -100 to 100, or 1-10
+  rationale varchar
+  dominant_emotion varchar
+  confidence_score integer  // e.g., 0-100
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+
+  indexes {
+    session_id [unique]  // one sentiment analysis per session
+  }
+}
+
+Table session_sentiment_statements {
+  id integer [primary key]
+  session_sentiment_id integer [ref: > session_sentiment.id]
+  member_id integer [ref: > members.id]
+  emotions varchar[]
+  exact_quotes text[]
+  is_negative bool [default: false]
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+}

@@ -161,4 +161,4 @@ class CallSentiment(CustomModel):
     rationale :str = Field(description="Rationale for the sentiment score")
     dominant_emotion :str = Field(description="Dominant emotion of the call")
     representative_quotes :List[CallSentimentQuote] = Field(description="Representative quotes from the call")  
-    confidence_score :int = Field(description="Give a number between 0 and 1.1.0 = very confident (clear emotional tone, long transcript 0.5 = mixed or short transcript 0.2 or below = ambiguous tone or very short transcript")
+    confidence_score :float = Field(description="Give a number between 0 and 1.1.0 = very confident (clear emotional tone, long transcript 0.5 = mixed or short transcript 0.2 or below = ambiguous tone or very short transcript")

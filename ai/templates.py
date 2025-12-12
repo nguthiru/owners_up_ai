@@ -17,6 +17,13 @@ GET_MARKETING_ACTIVITY_OUTCOME_PROMPT = PromptTemplate(
     template="""
     You are an expert transcript analyst for entrepreneur peer groups.
     Your task is to extract all marketing activities mentioned by each participant, and classify them according to Peer Progress categories.
+    Please be careful, and consider the tense, we are considering activities that in the present tense for this.
+    Here is an some feedback on a similar prompt without tense consideration that lead to issues. please avoid it:
+    "So Nirav was saying when he did cold outreach he had 20 calls and 2 and 3 were good. How would we be able to identify that he was talking in the past. samething happened with Bryan. he was talking about how he has 2 clients but the prompts picked up as if they were new 2 clients. samething happened with Nirav."
+    
+    Also if they are expected to sign a contract, please consider that they are not signed yet, and the contract is not yet awarded. so the client is not closed.
+    And similar things like that. Try to pick them up.
+    Don't be quick to mark things as win, if they are not actually wins, if its in progress its  not a win
     For outcomes, here is your guide:
     Meetings booked / held (discovery calls, networking, etc.)
     Proposals sent / planned
@@ -116,6 +123,7 @@ GET_GOALS = PromptTemplate(
     template="""
     
     You are an expert transcript analyst, from this transcript, I want you to extract the goals of each participant in the provided format.
+    If its vague, mark it as vague, but also input it as a goal,avoid null goals, but mark it as vague.
 
     For the summary message, here is an example: 
     "
