@@ -35,7 +35,7 @@ import type { Program, Group } from "@/lib/types";
 
 const formSchema = z.object({
   program_id: z.number({
-    required_error: "Please select a program",
+    error: "Please select a program",
   }),
   name: z.string().min(1, "Group name is required"),
   cohort: z.string().optional(),
