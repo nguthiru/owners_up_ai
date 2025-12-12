@@ -19,8 +19,6 @@ fastapi-cli==0.0.16
 fastapi-cloud-cli==0.6.0
 fastar==0.8.0
 filetype==1.2.0
-Flask==3.1.2
-flask-cors==6.0.1
 gitdb==4.0.12
 GitPython==3.1.45
 google-ai-generativelanguage==0.9.0

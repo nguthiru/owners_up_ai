@@ -1,15 +1,26 @@
 """
 OwnersUp Platform REST API
 
-Complete REST API for the peer coaching platform with full CRUD serialize_date(operations
+Complete REST API for the peer coaching platform with full CRUD operations
+Converted from Flask to FastAPI
 """
 
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-from datetime import datetime, date
-from typing import Optional
+from fastapi import FastAPI, HTTPException, Query, status
+from fastapi.middleware.cors import CORSMiddleware
+from datetime import datetime
 import os
 from dotenv import load_dotenv
+
+# Pydantic schemas
+from schemas import (
+    ProgramCreate, ProgramUpdate, ProgramResponse, ProgramListResponse,
+    GroupCreate, GroupResponse, GroupListResponse,
+    MemberCreate, MemberResponse, MemberListResponse,
+    GroupMemberCreate, GroupMemberListResponse,
+    SessionCreate, SessionResponse, SessionListResponse,
+    TranscriptProcessRequest, TranscriptProcessResponse, SaveExtractionsRequest,
+    MessageResponse, HealthResponse, GroupAnalyticsResponse
+)
 
 # AI extraction functions
 from ai.functions import (
@@ -24,12 +35,10 @@ from ai.functions import (
 # Database operations
 from db.client import get_supabase
 from db.operations import programs, groups, members, sessions
-from db.operations import attendance as attendance_ops
 from db.operations import goals as goals_ops
 from db.operations import challenges as challenges_ops
 from db.operations import stucks as stucks_ops
 from db.operations import marketing as marketing_ops
-from db.operations import sentiment as sentiment_ops
 
 # Utils
 from utils.name_matching import match_attendance_to_members
@@ -37,12 +46,26 @@ from utils.validators import validate_email, validate_slug, validate_transcript
 
 load_dotenv()
 
-app = Flask(__name__)
-CORS(app)  # Enable CORS for Nextjs frontend
+# Initialize FastAPI app
+app = FastAPI(
+    title="OwnersUp Platform API",
+    description="REST API for the peer coaching platform",
+    version="2.0.0"
+)
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Configure appropriately for production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 # Helper function to serialize dates
 def serialize_date(date_value):
-    """Convert date/datetime to ISO format string, or return as-is if already a serialize_date(string"""
+    """Convert date/datetime to ISO format string, or return as-is if already a string"""
     if date_value is None:
         return None
     if isinstance(date_value, str):
@@ -51,417 +74,388 @@ def serialize_date(date_value):
         return date_value.isoformat()
     return str(date_value)
 
+
 # ============================================================================
 # HEALTH CHECK
 # ============================================================================
 
-@app.route('/health', methods=['GET'])
-def health():
+@app.get('/health', response_model=HealthResponse, tags=["Health"])
+async def health():
     """Health check endpoint"""
-    return jsonify({"status": "healthy", "timestamp": datetime.now().isoformat()}), 200
+    return {"status": "healthy", "timestamp": datetime.now()}
 
 
 # ============================================================================
 # PROGRAMS ENDPOINTS
 # ============================================================================
 
-@app.route('/api/programs', methods=['GET'])
-def list_programs():
+@app.get('/api/programs', response_model=ProgramListResponse, tags=["Programs"])
+async def list_programs(active_only: bool = Query(True, description="Filter by active status")):
     """List all programs"""
     try:
-        active_only = request.args.get('active_only', 'true').lower() == 'true'
         all_programs = programs.list_programs(active_only=active_only)
 
-        return jsonify({
+        return {
             "programs": [
                 {
-                                "id": p.id,
+                    "id": p.id,
                     "name": p.name,
                     "slug": p.slug,
                     "description": p.description,
                     "is_active": p.is_active,
-                    "created_at": serialize_date(p.created_at),
-                    "updated_at": serialize_date(p.updated_at) if p.updated_at else None
+                    "created_at": p.created_at,
+                    "updated_at": p.updated_at
                 }
                 for p in all_programs
-            ]}), 200
+            ]
+        }
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.route('/api/programs/<int:program_id>', methods=['GET'])
-def get_program(program_id):
+
+@app.get('/api/programs/{program_id}', response_model=ProgramResponse, tags=["Programs"])
+async def get_program(program_id: int):
     """Get a single program by ID"""
     try:
         program = programs.get_program(program_id)
         if not program:
-            return jsonify({"error": "Program not found"}), 404
+            raise HTTPException(status_code=404, detail="Program not found")
 
-        return jsonify({
-                "id": program.id,
-            "name": program.name,
-            "slug": program.slug,
-            "description": program.description,
-            "is_active": program.is_active,
-            "created_at": serialize_date(program.created_at),
-            "updated_at": serialize_date(program.updated_at) if program.updated_at else None
-        }), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/programs', methods=['POST'])
-def create_program():
-    """Create a new program"""
-    try:
-        data = request.get_json()
-
-        if not data:
-            return jsonify({"error": "No JSON data provided"}), 400
-
-        name = data.get('name')
-        slug = data.get('slug')
-        description = data.get('description')
-
-        if not name:
-            return jsonify({"error": "name is required"}), 400
-        if not slug:
-            return jsonify({"error": "slug is required"}), 400
-
-        # Validate slug
-        if not validate_slug(slug):
-            return jsonify({"error": "Invalid slug format"}), 400
-
-        program = programs.create_program(name, slug, description)
-
-        return jsonify({
+        return {
             "id": program.id,
             "name": program.name,
             "slug": program.slug,
             "description": program.description,
             "is_active": program.is_active,
-            "created_at": serialize_date(program.created_at)
-        }), 201
+            "created_at": program.created_at,
+            "updated_at": program.updated_at
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post('/api/programs', response_model=ProgramResponse, status_code=status.HTTP_201_CREATED, tags=["Programs"])
+async def create_program(program: ProgramCreate):
+    """Create a new program"""
+    try:
+        # Validate slug
+        if not validate_slug(program.slug):
+            raise HTTPException(status_code=400, detail="Invalid slug format")
+
+        new_program = programs.create_program(program.name, program.slug, program.description)
+
+        return {
+            "id": new_program.id,
+            "name": new_program.name,
+            "slug": new_program.slug,
+            "description": new_program.description,
+            "is_active": new_program.is_active,
+            "created_at": new_program.created_at,
+            "updated_at": new_program.updated_at
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         if "duplicate key" in str(e).lower():
-            return jsonify({"error": "A program with this slug already exists"}), 409
-        return jsonify({"error": str(e)}), 500
+            raise HTTPException(status_code=409, detail="A program with this slug already exists")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.route('/api/programs/<int:program_id>', methods=['PATCH'])
-def update_program(program_id):
+@app.patch('/api/programs/{program_id}', response_model=ProgramResponse, tags=["Programs"])
+async def update_program(program_id: int, program_update: ProgramUpdate):
     """Update a program"""
     try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "No JSON data provided"}), 400
+        updated_program = programs.update_program(program_id, **program_update.model_dump(exclude_unset=True))
+        if not updated_program:
+            raise HTTPException(status_code=404, detail="Program not found")
 
-        program = programs.update_program(program_id, **data)
-        if not program:
-            return jsonify({"error": "Program not found"}), 404
-
-        return jsonify({
-                                        "id": program.id,
-            "name": program.name,
-            "slug": program.slug,
-            "description": program.description,
-            "is_active": program.is_active,
-            "updated_at": program.updated_at.isoformat() if program.updated_at else None
-        }), 200
+        return {
+            "id": updated_program.id,
+            "name": updated_program.name,
+            "slug": updated_program.slug,
+            "description": updated_program.description,
+            "is_active": updated_program.is_active,
+            "created_at": updated_program.created_at,
+            "updated_at": updated_program.updated_at
+        }
+    except HTTPException:
+        raise
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.route('/api/programs/<int:program_id>', methods=['DELETE'])
-def delete_program(program_id):
+@app.delete('/api/programs/{program_id}', response_model=MessageResponse, tags=["Programs"])
+async def delete_program(program_id: int):
     """Soft delete a program"""
     try:
         success = programs.delete_program(program_id)
         if not success:
-            return jsonify({"error": "Program not found"}), 404
+            raise HTTPException(status_code=404, detail="Program not found")
 
-        return jsonify({"message": "Program deleted successfully"}), 200
+        return {"message": "Program deleted successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================================================
 # GROUPS ENDPOINTS
 # ============================================================================
 
-@app.route('/api/programs/<int:program_id>/groups', methods=['GET'])
-def list_groups_by_program(program_id):
+@app.get('/api/programs/{program_id}/groups', response_model=GroupListResponse, tags=["Groups"])
+async def list_groups_by_program(program_id: int, active_only: bool = Query(True)):
     """List all groups for a program"""
     try:
-        active_only = request.args.get('active_only', 'true').lower() == 'true'
         all_groups = groups.list_groups_by_program(program_id, active_only=active_only)
 
-        return jsonify({
+        return {
             "groups": [
                 {
                     "id": g.id,
                     "program_id": g.program_id,
                     "name": g.name,
                     "cohort": g.cohort,
-                    "start_date": serialize_date(g.start_date),
-                    "end_date": serialize_date(g.end_date),
+                    "start_date": g.start_date,
+                    "end_date": g.end_date,
                     "is_active": g.is_active,
-                    "created_at": serialize_date(g.created_at),
-                    "updated_at": serialize_date(g.updated_at) if g.updated_at else None
+                    "created_at": g.created_at,
+                    "updated_at": g.updated_at
                 }
                 for g in all_groups
             ]
-        }), 200
+        }
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.route('/api/groups/<int:group_id>', methods=['GET'])
-def get_group(group_id):
+@app.get('/api/groups/{group_id}', response_model=GroupResponse, tags=["Groups"])
+async def get_group(group_id: int):
     """Get a single group by ID"""
     try:
         group = groups.get_group(group_id)
         if not group:
-            return jsonify({"error": "Group not found"}), 404
+            raise HTTPException(status_code=404, detail="Group not found")
 
-        return jsonify({
+        return {
             "id": group.id,
             "program_id": group.program_id,
             "name": group.name,
             "cohort": group.cohort,
-            "start_date": serialize_date(group.start_date),
-            "end_date": serialize_date(group.end_date),
+            "start_date": group.start_date,
+            "end_date": group.end_date,
             "is_active": group.is_active,
-            "created_at": serialize_date(group.created_at),
-            "updated_at": serialize_date(group.updated_at) if group.updated_at else None
-        }), 200
+            "created_at": group.created_at,
+            "updated_at": group.updated_at
+        }
+    except HTTPException:
+        raise
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.route('/api/groups', methods=['POST'])
-def create_group():
+@app.post('/api/groups', response_model=GroupResponse, status_code=status.HTTP_201_CREATED, tags=["Groups"])
+async def create_group(group: GroupCreate):
     """Create a new group"""
     try:
-        data = request.get_json()
+        new_group = groups.create_group(
+            group.program_id,
+            group.name,
+            group.cohort,
+            group.start_date,
+            group.end_date
+        )
 
-        if not data:
-            return jsonify({"error": "No JSON data provided"}), 400
-
-        program_id = data.get('program_id')
-        name = data.get('name')
-        cohort = data.get('cohort')
-        start_date_str = data.get('start_date')
-        end_date_str = data.get('end_date')
-
-        if not program_id:
-            return jsonify({"error": "program_id is required"}), 400
-        if not name:
-            return jsonify({"error": "name is required"}), 400
-
-        # Parse dates
-        start_date = datetime.fromisoformat(start_date_str) if start_date_str else None
-        end_date = datetime.fromisoformat(end_date_str) if end_date_str else None
-
-        group = groups.create_group(program_id, name, cohort, start_date, end_date)
-
-        return jsonify({
-            "id": group.id,
-                "program_id": group.program_id,
-            "name": group.name,
-            "cohort": group.cohort,
-            "start_date": serialize_date(group.start_date),
-            "end_date": serialize_date(group.end_date),
-            "is_active": group.is_active,
-            "created_at": serialize_date(group.created_at)
-        }), 201
+        return {
+            "id": new_group.id,
+            "program_id": new_group.program_id,
+            "name": new_group.name,
+            "cohort": new_group.cohort,
+            "start_date": new_group.start_date,
+            "end_date": new_group.end_date,
+            "is_active": new_group.is_active,
+            "created_at": new_group.created_at,
+            "updated_at": new_group.updated_at
+        }
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================================================
 # MEMBERS ENDPOINTS
 # ============================================================================
 
-@app.route('/api/members', methods=['GET'])
-def list_members():
+@app.get('/api/members', response_model=MemberListResponse, tags=["Members"])
+async def list_members(active_only: bool = Query(True)):
     """List all members"""
     try:
-        active_only = request.args.get('active_only', 'true').lower() == 'true'
         all_members = members.list_members(active_only=active_only)
 
-        return jsonify({
+        return {
             "members": [
                 {
                     "id": m.id,
                     "name": m.name,
                     "email": m.email,
                     "is_active": m.is_active,
-                    "created_at": serialize_date(m.created_at),
-                    "updated_at": serialize_date(m.updated_at) if m.updated_at else None
+                    "created_at": m.created_at,
+                    "updated_at": m.updated_at
                 }
                 for m in all_members
             ]
-        }), 200
+        }
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.route('/api/members/<int:member_id>', methods=['GET'])
-def get_member(member_id):
+@app.get('/api/members/{member_id}', response_model=MemberResponse, tags=["Members"])
+async def get_member(member_id: int):
     """Get a single member by ID"""
     try:
         member = members.get_member(member_id)
         if not member:
-            return jsonify({"error": "Member not found"}), 404
+            raise HTTPException(status_code=404, detail="Member not found")
 
-        return jsonify({
+        return {
             "id": member.id,
             "name": member.name,
             "email": member.email,
             "is_active": member.is_active,
-            "created_at": serialize_date(member.created_at),
-            "updated_at": serialize_date(member.updated_at) if member.updated_at else None
-        }), 200
+            "created_at": member.created_at,
+            "updated_at": member.updated_at
+        }
+    except HTTPException:
+        raise
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.route('/api/members', methods=['POST'])
-def create_member():
+@app.post('/api/members', response_model=MemberResponse, status_code=status.HTTP_201_CREATED, tags=["Members"])
+async def create_member(member: MemberCreate):
     """Create a new member"""
     try:
-        data = request.get_json()
-
-        if not data:
-            return jsonify({"error": "No JSON data provided"}), 400
-
-        name = data.get('name')
-        email = data.get('email')
-
-        if not name:
-            return jsonify({"error": "name is required"}), 400
-        if not email:
-            return jsonify({"error": "email is required"}), 400
-
         # Validate email
-        if not validate_email(email):
-            return jsonify({"error": "Invalid email format"}), 400
+        if not validate_email(member.email):
+            raise HTTPException(status_code=400, detail="Invalid email format")
 
-        member = members.create_member(name, email)
+        new_member = members.create_member(member.name, member.email)
 
-        return jsonify({
-            "id": member.id,
-            "name": member.name,
-            "email": member.email,
-            "is_active": member.is_active,
-            "created_at": serialize_date(member.created_at)
-        }), 201
+        return {
+            "id": new_member.id,
+            "name": new_member.name,
+            "email": new_member.email,
+            "is_active": new_member.is_active,
+            "created_at": new_member.created_at,
+            "updated_at": new_member.updated_at
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         if "duplicate key" in str(e).lower():
-            return jsonify({"error": "A member with this email already exists"}), 409
-        return jsonify({"error": str(e)}), 500
+            raise HTTPException(status_code=409, detail="A member with this email already exists")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.route('/api/members/<int:member_id>/goals', methods=['GET'])
-def get_member_goals(member_id):
+@app.get('/api/members/{member_id}/goals', tags=["Members"])
+async def get_member_goals(member_id: int, limit: int = Query(50, ge=1, le=500)):
     """Get goals for a specific member"""
     try:
-        limit = request.args.get('limit', 50, type=int)
         member_goals = goals_ops.get_member_goals(member_id, limit)
-        return jsonify({"goals": member_goals}), 200
+        return {"goals": member_goals}
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.route('/api/members/<int:member_id>/challenges', methods=['GET'])
-def get_member_challenges(member_id):
+@app.get('/api/members/{member_id}/challenges', tags=["Members"])
+async def get_member_challenges(member_id: int, limit: int = Query(50, ge=1, le=500)):
     """Get challenges for a specific member"""
     try:
-        limit = request.args.get('limit', 50, type=int)
         member_challenges = challenges_ops.get_member_challenges(member_id, limit)
-        return jsonify({"challenges": member_challenges}), 200
+        return {"challenges": member_challenges}
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.route('/api/members/<int:member_id>/stucks', methods=['GET'])
-def get_member_stucks(member_id):
+@app.get('/api/members/{member_id}/stucks', tags=["Members"])
+async def get_member_stucks(member_id: int, limit: int = Query(50, ge=1, le=500)):
     """Get stuck detections for a specific member"""
     try:
-        limit = request.args.get('limit', 50, type=int)
         member_stucks = stucks_ops.get_member_stucks(member_id, limit)
-        return jsonify({"stucks": member_stucks}), 200
+        return {"stucks": member_stucks}
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.route('/api/members/<int:member_id>/marketing', methods=['GET'])
-def get_member_marketing(member_id):
+@app.get('/api/members/{member_id}/marketing', tags=["Members"])
+async def get_member_marketing(member_id: int, limit: int = Query(50, ge=1, le=500)):
     """Get marketing activities for a specific member"""
     try:
-        limit = request.args.get('limit', 50, type=int)
         member_marketing = marketing_ops.get_member_marketing(member_id, limit)
-        return jsonify({"marketing": member_marketing}), 200
+        return {"marketing": member_marketing}
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.route('/api/members/<int:member_id>/attendance', methods=['GET'])
-def get_member_attendance(member_id):
+@app.get('/api/members/{member_id}/attendance', tags=["Members"])
+async def get_member_attendance(member_id: int):
     """Get attendance records for a specific member"""
     try:
         supabase = get_supabase()
         result = supabase.table('session_attendance').select(
             '*, sessions(id, date, session_number, groups(name))'
         ).eq('member_id', member_id).order('created_at', desc=True).execute()
-        return jsonify({"attendance": result.data}), 200
+        return {"attendance": result.data}
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.route('/api/members/<int:member_id>/groups', methods=['GET'])
-def get_member_groups(member_id):
+@app.get('/api/members/{member_id}/groups', tags=["Members"])
+async def get_member_groups(member_id: int):
     """Get all groups a member belongs to"""
     try:
         member_groups = members.list_member_groups(member_id, active_only=True)
-        return jsonify({"groups": member_groups}), 200
+        return {"groups": member_groups}
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.route('/api/groups/<int:group_id>/members', methods=['GET'])
-def list_group_members(group_id):
+@app.get('/api/groups/{group_id}/members', response_model=GroupMemberListResponse, tags=["Groups", "Members"])
+async def list_group_members(group_id: int):
     """List all members in a group"""
     try:
         group_members_list = members.list_group_members(group_id)
 
-        return jsonify({
+        return {
             "members": [
                 {
                     "group_member_id": gm['id'],
                     "group_id": gm['group_id'],
                     "member_id": gm['member_id'],
                     "role": gm['role'],
-                    "joined_at": serialize_date(gm['joined_at']),
+                    "joined_at": gm['joined_at'],
                     "member": {
                         "id": gm['members']['id'],
                         "name": gm['members']['name'],
-                        "email": gm['members']['email']
+                        "email": gm['members']['email'],
+                        "is_active": gm['members'].get('is_active', True),
+                        "created_at": gm['members'].get('created_at'),
+                        "updated_at": gm['members'].get('updated_at')
                     }
                 }
                 for gm in group_members_list
             ]
-        }), 200
+        }
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.route('/api/group-members/<int:group_member_id>', methods=['DELETE'])
-def remove_member_from_group(group_member_id):
+@app.delete('/api/group-members/{group_member_id}', response_model=MessageResponse, tags=["Members"])
+async def remove_member_from_group(group_member_id: int):
     """Remove a member from a group by deactivating the group membership"""
     try:
         supabase = get_supabase()
-        from datetime import datetime
 
         result = supabase.table('group_members').update({
             'is_active': False,
@@ -469,131 +463,117 @@ def remove_member_from_group(group_member_id):
         }).eq('id', group_member_id).execute()
 
         if not result.data:
-            return jsonify({"error": "Group membership not found"}), 404
+            raise HTTPException(status_code=404, detail="Group membership not found")
 
-        return jsonify({"message": "Member removed from group successfully"}), 200
+        return {"message": "Member removed from group successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.route('/api/groups/<int:group_id>/members', methods=['POST'])
-def assign_member_to_group(group_id):
+@app.post('/api/groups/{group_id}/members', status_code=status.HTTP_201_CREATED, tags=["Groups", "Members"])
+async def assign_member_to_group(group_id: int, group_member: GroupMemberCreate):
     """Assign a member to a group"""
     try:
-        data = request.get_json()
+        new_group_member = members.assign_member_to_group(
+            group_id,
+            group_member.member_id,
+            group_member.role
+        )
 
-        if not data:
-            return jsonify({"error": "No JSON data provided"}), 400
-
-        member_id = data.get('member_id')
-        role = data.get('role', 'participant')
-
-        if not member_id:
-            return jsonify({"error": "member_id is required"}), 400
-
-        group_member = members.assign_member_to_group(group_id, member_id, role)
-
-        return jsonify({
-            "id": group_member['id'],
-            "group_id": group_member['group_id'],
-            "member_id": group_member['member_id'],
-            "role": group_member['role'],
-            "joined_at": serialize_date(group_member['joined_at'])
-        }), 201
+        return {
+            "id": new_group_member['id'],
+            "group_id": new_group_member['group_id'],
+            "member_id": new_group_member['member_id'],
+            "role": new_group_member['role'],
+            "joined_at": serialize_date(new_group_member['joined_at'])
+        }
     except Exception as e:
         if "duplicate key" in str(e).lower():
-            return jsonify({"error": "Member already assigned to this group"}), 409
-        return jsonify({"error": str(e)}), 500
+            raise HTTPException(status_code=409, detail="Member already assigned to this group")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================================================
 # SESSIONS ENDPOINTS
 # ============================================================================
 
-@app.route('/api/groups/<int:group_id>/sessions', methods=['GET'])
-def list_sessions_by_group(group_id):
+@app.get('/api/groups/{group_id}/sessions', response_model=SessionListResponse, tags=["Sessions"])
+async def list_sessions_by_group(group_id: int):
     """List all sessions for a group"""
     try:
         all_sessions = sessions.list_sessions_by_group(group_id)
 
-        return jsonify({
+        return {
             "sessions": [
                 {
                     "id": s.id,
                     "group_id": s.group_id,
                     "session_number": s.session_number,
-                    "session_date": serialize_date(s.date),
+                    "session_date": s.date,
                     "notes": s.notes,
                     "transcript": s.transcript,
-                    "created_at": serialize_date(s.created_at),
-                    "updated_at": serialize_date(s.updated_at) if s.updated_at else None
+                    "created_at": s.created_at,
+                    "updated_at": s.updated_at
                 }
                 for s in all_sessions
             ]
-        }), 200
+        }
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.route('/api/sessions/<int:session_id>', methods=['GET'])
-def get_session(session_id):
+@app.get('/api/sessions/{session_id}', response_model=SessionResponse, tags=["Sessions"])
+async def get_session(session_id: int):
     """Get a single session by ID"""
     try:
         session = sessions.get_session(session_id)
         if not session:
-            return jsonify({"error": "Session not found"}), 404
+            raise HTTPException(status_code=404, detail="Session not found")
 
-        return jsonify({
+        return {
             "id": session.id,
             "group_id": session.group_id,
             "session_number": session.session_number,
-            "session_date": serialize_date(session.date),
+            "session_date": session.date,
             "notes": session.notes,
             "transcript": session.transcript,
-            "created_at": serialize_date(session.created_at),
-            "updated_at": serialize_date(session.updated_at) if session.updated_at else None
-        }), 200
+            "created_at": session.created_at,
+            "updated_at": session.updated_at
+        }
+    except HTTPException:
+        raise
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.route('/api/sessions', methods=['POST'])
-def create_session():
+@app.post('/api/sessions', response_model=SessionResponse, status_code=status.HTTP_201_CREATED, tags=["Sessions"])
+async def create_session(session: SessionCreate):
     """Create a new session"""
     try:
-        data = request.get_json()
+        new_session = sessions.create_session(
+            session.group_id,
+            session.session_date,
+            session.notes
+        )
 
-        if not data:
-            return jsonify({"error": "No JSON data provided"}), 400
-
-        group_id = data.get('group_id')
-        session_date_str = data.get('session_date')
-        notes = data.get('notes')
-
-        if not group_id:
-            return jsonify({"error": "group_id is required"}), 400
-        if not session_date_str:
-            return jsonify({"error": "session_date is required"}), 400
-
-        # Parse date
-        session_date = datetime.fromisoformat(session_date_str) if session_date_str else None
-
-        session = sessions.create_session(group_id, session_date, notes)
-
-        return jsonify({
-                    "id": session.id,
-            "group_id": session.group_id,
-            "session_number": session.session_number,
-                    "session_date": serialize_date(session.date),
-            "notes": session.notes,
-            "created_at": serialize_date(session.created_at)
-        }), 201
+        return {
+            "id": new_session.id,
+            "group_id": new_session.group_id,
+            "session_number": new_session.session_number,
+            "session_date": new_session.date,
+            "notes": new_session.notes,
+            "transcript": new_session.transcript,
+            "created_at": new_session.created_at,
+            "updated_at": new_session.updated_at
+        }
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.route('/api/sessions/<int:session_id>/process-transcript', methods=['POST'])
-def process_transcript(session_id):
+@app.post('/api/sessions/{session_id}/process-transcript', response_model=TranscriptProcessResponse, tags=["Sessions", "AI"])
+async def process_transcript(session_id: int, request: TranscriptProcessRequest):
     """
     Process transcript with AI extraction and save all results
 
@@ -605,25 +585,17 @@ def process_transcript(session_id):
     5. Saves to database after frontend confirmation
     """
     try:
-        data = request.get_json()
-
-        if not data:
-            return jsonify({"error": "No JSON data provided"}), 400
-
-        transcript = data.get('transcript')
-
-        if not transcript:
-            return jsonify({"error": "transcript is required"}), 400
+        transcript = request.transcript
 
         # Validate transcript
         is_valid, error = validate_transcript(transcript)
         if not is_valid:
-            return jsonify({"error": error}), 400
+            raise HTTPException(status_code=400, detail=error)
 
         # Get session to verify it exists
         session = sessions.get_session(session_id)
         if not session:
-            return jsonify({"error": "Session not found"}), 404
+            raise HTTPException(status_code=404, detail="Session not found")
 
         # Get group members for name matching
         group_members_data = members.list_group_members(session.group_id)
@@ -661,42 +633,36 @@ def process_transcript(session_id):
         sessions.update_session(session_id, transcript=transcript)
 
         # Return results for frontend review
-        return jsonify({
+        return {
             "session_id": session_id,
             "extraction_results": {
-                            "goals": goals_result.model_dump(mode='json'),
+                "goals": goals_result.model_dump(mode='json'),
                 "challenges": challenges_result.model_dump(mode='json'),
                 "marketing_activities": marketing_result.model_dump(mode='json'),
                 "stuck_detections": stucks_result.model_dump(mode='json'),
                 "sentiment": sentiment_result.model_dump(mode='json'),
                 "attendance": matched_attendance
             }
-        }), 200
+        }
 
+    except HTTPException:
+        raise
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.route('/api/sessions/<int:session_id>/save-extractions', methods=['POST'])
-def save_extractions(session_id):
+@app.post('/api/sessions/{session_id}/save-extractions', response_model=MessageResponse, tags=["Sessions", "AI"])
+async def save_extractions(session_id: int, request: SaveExtractionsRequest):
     """
     Save AI extractions after frontend review/modification
     """
     try:
-        data = request.get_json()
-
-        if not data:
-            return jsonify({"error": "No JSON data provided"}), 400
-
-        extraction_results = data.get('extraction_results')
-
-        if not extraction_results:
-            return jsonify({"error": "extraction_results is required"}), 400
+        extraction_results = request.extraction_results
 
         # Get session to find group and members for name matching
         session = sessions.get_session(session_id)
         if not session:
-            return jsonify({"error": "Session not found"}), 404
+            raise HTTPException(status_code=404, detail="Session not found")
 
         # Get group members to build name -> ID mapping
         group_members_data = members.list_group_members(session.group_id)
@@ -833,75 +799,56 @@ def save_extractions(session_id):
         )
 
         if success:
-            return jsonify({"message": "Extractions saved successfully"}), 200
+            return {"message": "Extractions saved successfully"}
         else:
-            return jsonify({"error": "Failed to save extractions"}), 500
+            raise HTTPException(status_code=500, detail="Failed to save extractions")
 
+    except HTTPException:
+        raise
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================================================
 # AI EXTRACTION ENDPOINTS (Original endpoints for standalone use)
 # ============================================================================
 
-@app.route('/api/extract/marketing-activities', methods=['POST'])
-def extract_marketing_activities():
+@app.post('/api/extract/marketing-activities', tags=["AI", "Extraction"])
+async def extract_marketing_activities(request: TranscriptProcessRequest):
     """Extract marketing activities from transcript"""
     try:
-        data = request.get_json()
-        transcript = data.get('transcript')
-
-        if not transcript:
-            return jsonify({"error": "transcript is required"}), 400
-
-        result = get_marketing_activities(transcript)
-        return jsonify(result.model_dump(mode='json')), 200
-
+        result = get_marketing_activities(request.transcript)
+        return result.model_dump(mode='json')
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.route('/api/extract/challenges', methods=['POST'])
-def extract_challenges():
+@app.post('/api/extract/challenges', tags=["AI", "Extraction"])
+async def extract_challenges(request: TranscriptProcessRequest):
     """Extract challenges from transcript"""
     try:
-        data = request.get_json()
-        transcript = data.get('transcript')
-
-        if not transcript:
-            return jsonify({"error": "transcript is required"}), 400
-
-        result = get_challenges(transcript)
-        return jsonify(result.model_dump(mode='json')), 200
-
+        result = get_challenges(request.transcript)
+        return result.model_dump(mode='json')
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.route('/api/extract/goals', methods=['POST'])
-def extract_goals():
+@app.post('/api/extract/goals', tags=["AI", "Extraction"])
+async def extract_goals(request: TranscriptProcessRequest):
     """Extract goals from transcript"""
     try:
-        data = request.get_json()
-        transcript = data.get('transcript')
-
-        if not transcript:
-            return jsonify({"error": "transcript is required"}), 400
-
-        result = get_goals(transcript)
-        return jsonify(result.model_dump(mode='json')), 200
-
+        result = get_goals(request.transcript)
+        return result.model_dump(mode='json')
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================================================
 # ANALYTICS ENDPOINTS
 # ============================================================================
 
-@app.route('/api/groups/<int:group_id>/analytics', methods=['GET'])
-def get_group_analytics(group_id):
+@app.get('/api/groups/{group_id}/analytics', response_model=GroupAnalyticsResponse, tags=["Analytics"])
+async def get_group_analytics(group_id: int):
     """Get comprehensive analytics for a group including risk ratings"""
     try:
         supabase = get_supabase()
@@ -994,37 +941,18 @@ def get_group_analytics(group_id):
             })
 
         # Calculate group-level stats
-        total_sessions = supabase.table('sessions').select('id', count='exact').eq('group_id', group_id).execute()
+        total_sessions_result = supabase.table('sessions').select('id', count='exact').eq('group_id', group_id).execute()
 
-        return jsonify({
+        return {
             "group_id": group_id,
-            "total_sessions": total_sessions.count or 0,
+            "total_sessions": total_sessions_result.count or 0,
             "members": analytics_data
-        }), 200
+        }
 
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
-
-
-# ============================================================================
-# ERROR HANDLERS
-# ============================================================================
-
-@app.errorhandler(404)
-def not_found(error):
-    return jsonify({"error": "Endpoint not found"}), 404
-
-
-@app.errorhandler(405)
-def method_not_allowed(error):
-    return jsonify({"error": "Method not allowed"}), 405
-
-
-@app.errorhandler(500)
-def internal_error(error):
-    return jsonify({"error": "Internal server error"}), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================================================
@@ -1032,6 +960,6 @@ def internal_error(error):
 # ============================================================================
 
 if __name__ == '__main__':
+    import uvicorn
     port = int(os.getenv('PORT', 4000))
-    debug = os.getenv('FLASK_ENV', 'development') == 'development'
-    app.run(host='0.0.0.0', port=port, debug=debug)
+    uvicorn.run("api:app", host='0.0.0.0', port=port, reload=True)
