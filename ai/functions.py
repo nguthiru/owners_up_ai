@@ -14,17 +14,17 @@ llm = ChatGoogleGenerativeAI(
 )
 
 
-def get_marketing_activities(transcript) -> MarketingActivities :
+async def get_marketing_activities(transcript) -> MarketingActivities :
 
     """
     Get the marketing activities each client posted out
     """
 
-    chain = GET_MARKETING_ACTIVITY_OUTCOME_PROMPT | llm 
+    chain = GET_MARKETING_ACTIVITY_OUTCOME_PROMPT | llm
 
 
 
-    res = chain.invoke(transcript)
+    res = await chain.ainvoke(transcript)
 
     res = MarketingActivities.parser.parse(res.content)
 
@@ -33,39 +33,39 @@ def get_marketing_activities(transcript) -> MarketingActivities :
     
 
 
-def get_challenges(transcript) -> Challenges:
+async def get_challenges(transcript) -> Challenges:
     """
 
     Get challenges experienced by the CTOs
     """
 
-    chain = GET_CHALLENGES_PROMPT | llm 
+    chain = GET_CHALLENGES_PROMPT | llm
 
-    res = chain.invoke(transcript)
+    res = await chain.ainvoke(transcript)
 
     res = Challenges.parser.parse(res.content)
 
     return res
 
 
-def get_stuck_detections(transcript) -> StuckDetections:
+async def get_stuck_detections(transcript) -> StuckDetections:
     """
     Get Stuck detections
 
     """
 
-    chain = GET_STUCK_DETECTIONS | llm 
+    chain = GET_STUCK_DETECTIONS | llm
 
-    res = chain.invoke(transcript)
+    res = await chain.ainvoke(transcript)
     res =  StuckDetections.parser.parse(res.content)
 
     return res
 
-def get_attendance(attendance, transcript) -> WeeklyAttendance:
+async def get_attendance(attendance, transcript) -> WeeklyAttendance:
 
-    chain = GET_ATTENDANCE | llm 
+    chain = GET_ATTENDANCE | llm
 
-    res =  chain.invoke(
+    res =  await chain.ainvoke(
         {
             "attendance": attendance,
             "transcript": transcript
@@ -76,11 +76,11 @@ def get_attendance(attendance, transcript) -> WeeklyAttendance:
 
     return res
 
-def get_goals(transcript) -> WeeklyGoals:
+async def get_goals(transcript) -> WeeklyGoals:
 
-    chain = GET_GOALS | llm 
+    chain = GET_GOALS | llm
 
-    res =  chain.invoke(transcript)
+    res =  await chain.ainvoke(transcript)
 
     res = WeeklyGoals.parser.parse(res.content)
 
@@ -103,14 +103,14 @@ def get_risk_rating(attendance, goals, marketing_activity):
         }
     )
 
-def get_call_sentiment(transcript) -> CallSentiment:
+async def get_call_sentiment(transcript) -> CallSentiment:
     """
     Get the sentiment of the call
     """
 
-    chain = GET_CALL_SENTIMENT | llm 
+    chain = GET_CALL_SENTIMENT | llm
 
-    res = chain.invoke(transcript)
+    res = await chain.ainvoke(transcript)
 
     res = CallSentiment.parser.parse(res.content)
 

@@ -9,6 +9,7 @@ from fastapi import FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 import os
+import asyncio
 from dotenv import load_dotenv
 
 # Pydantic schemas
@@ -615,13 +616,22 @@ async def process_transcript(session_id: int, request: TranscriptProcessRequest)
             for gm in group_members_data
         ]
 
-        # Run AI extractions
-        goals_result = get_goals(transcript)
-        challenges_result = get_challenges(transcript)
-        marketing_result = get_marketing_activities(transcript)
-        stucks_result = get_stuck_detections(transcript)
-        sentiment_result = get_call_sentiment(transcript)
-        attendance_result = get_attendance(member_names, transcript)
+        # Run AI extractions in parallel for better performance
+        (
+            goals_result,
+            challenges_result,
+            marketing_result,
+            stucks_result,
+            sentiment_result,
+            attendance_result
+        ) = await asyncio.gather(
+            get_goals(transcript),
+            get_challenges(transcript),
+            get_marketing_activities(transcript),
+            get_stuck_detections(transcript),
+            get_call_sentiment(transcript),
+            get_attendance(member_names, transcript)
+        )
 
         # Match attendance names to members
         matched_attendance = match_attendance_to_members(
@@ -817,7 +827,7 @@ async def save_extractions(session_id: int, request: SaveExtractionsRequest):
 async def extract_marketing_activities(request: TranscriptProcessRequest):
     """Extract marketing activities from transcript"""
     try:
-        result = get_marketing_activities(request.transcript)
+        result = await get_marketing_activities(request.transcript)
         return result.model_dump(mode='json')
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -827,7 +837,7 @@ async def extract_marketing_activities(request: TranscriptProcessRequest):
 async def extract_challenges(request: TranscriptProcessRequest):
     """Extract challenges from transcript"""
     try:
-        result = get_challenges(request.transcript)
+        result = await get_challenges(request.transcript)
         return result.model_dump(mode='json')
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -837,7 +847,7 @@ async def extract_challenges(request: TranscriptProcessRequest):
 async def extract_goals(request: TranscriptProcessRequest):
     """Extract goals from transcript"""
     try:
-        result = get_goals(request.transcript)
+        result = await get_goals(request.transcript)
         return result.model_dump(mode='json')
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
